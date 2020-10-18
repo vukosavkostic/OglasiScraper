@@ -1,17 +1,9 @@
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.keys import Keys
+from constants import get_webdriver
 import time
 import re
-from constants import(
-    get_webdriver,
-    DIRECTORY,
-    SEARCH_TERM,
-    MIN_PRICE,
-    MAX_PRICE,
-    CURRENCY,
-    BASE_URL,
-    FILTERS
-)
+
 
 class OglasiApi():
     def __init__(self, search_term, filters, base_url):
@@ -22,6 +14,7 @@ class OglasiApi():
         # url difference after adding price filters
         self.city_filter = '/grad/'
         self.price_filter = f"?pr%5Bs%5D={self.filters['min']}&pr%5Be%5D={self.filters['max']}&pr%5Bc%5D={self.filters['currency']}"
+        self.page = 1
 
     def run(self):
         print('Starting script...')
@@ -55,12 +48,30 @@ class OglasiApi():
         price_filter_applied_url = f"{self.driver.current_url}{self.price_filter}"
         self.driver.get(price_filter_applied_url)
         time.sleep(5)
-        print(f"Current URL: {self.driver.current_url}...")
         all_property = []
-        property = self.get_page_data()
-        all_property.append(property)
+        while True:
+            print(f"Current URL: {self.driver.current_url}...")
+            print(f"Current page is: {self.page}...")
+            page_url = f"{self.driver.current_url}p={self.page}"
+            time.sleep(5)
+            property = self.get_page_data()
+            all_property.append(property)
+            self.driver.get(page_url)
+            try:
+                next_page_button = self.driver.find_element_by_xpath('/html/body/div[3]/div/div/nav/ul[1]/li[8]/a')
+                next_page_button.click()
+                time.sleep(5)
+                self.page = self.page + 1
+            except NoSuchElementException as e:
+                print('No more pages...')
+                break
+
+            if self.page == 30:
+                break
+
         self.driver.quit()
         return all_property
+
 
     def get_page_data(self):
         print('Getting links of property...')
@@ -69,7 +80,7 @@ class OglasiApi():
             print('Script stopped...')
             return
 
-        print(f"Got {len(links)} links of property from page...")
+        print(f"Got {len(links)} links of property from page {self.page}...")
         property_data = self.get_property_info(links)
         print(f"Got info of {len(property_data)} ads in {self.search_term}...")
         return property_data
