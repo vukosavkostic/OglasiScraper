@@ -47,26 +47,29 @@ class OglasiApi():
         time.sleep(3)
         price_filter_applied_url = f"{self.driver.current_url}{self.price_filter}"
         self.driver.get(price_filter_applied_url)
+        without_page_number_url = self.driver.current_url
         time.sleep(5)
         all_property = []
         while True:
             print(f"Current URL: {self.driver.current_url}...")
             print(f"Current page is: {self.page}...")
-            page_url = f"{self.driver.current_url}p={self.page}"
-            time.sleep(5)
+            with_page_number_url = f"{without_page_number_url}&p={self.page}"
             property = self.get_page_data()
             all_property.append(property)
-            self.driver.get(page_url)
+            self.driver.get(with_page_number_url)
             try:
-                next_page_button = self.driver.find_element_by_xpath('/html/body/div[3]/div/div/nav/ul[1]/li[8]/a')
+                self.page = self.page + 1
+                # next_page_button = self.driver.find_element_by_css_selector("a[href='/oglasi/nekretnine/izdavanje/grad/novi-sad?pr%5Bs%5D=0&pr%5Be%5D=400&pr%5Bc%5D=EUR&p={0}']".format(self.page))
+                next_page_button = self.driver.find_element_by_link_text(f"{self.page}")
                 next_page_button.click()
                 time.sleep(5)
-                self.page = self.page + 1
+
             except NoSuchElementException as e:
                 print('No more pages...')
+                print(e)
                 break
 
-            if self.page == 30:
+            if self.page > 30:
                 break
 
         self.driver.quit()
@@ -106,6 +109,10 @@ class OglasiApi():
         asins = self.get_asins(links)
         property_data = []
         for asin in asins:
+            if asin == None:
+                print('Can\'t get data of ad...')
+                continue
+
             ad = self.get_data_of_one_ad(asin)
             if ad:
                 property_data.append(ad)
@@ -120,13 +127,15 @@ class OglasiApi():
         name = self.get_ad_name(asin)
         price = self.get_ad_price(asin)
         location = self.get_ad_location(asin)
-        # room_numbers = self.get_room_numbers(asin)
-        quadrature = self.get_quadrature(asin)
         advertiser_name = self.get_advertiser_name(asin)
         advertiser_number = self.get_advertiser_number(asin)
         date = self.get_date(asin)
+        table = self.get_table()
+        # it seems like i can get all this data itterating thought table, but it keep it old way and just get new data from table
+        quadrature = self.get_quadrature(asin, table)
+        room_number = self.get_room_number(asin, table)
         # if name and price and location and room_numbers and quadrature and advertiser_name and advertiser_number and date:
-        ad_info = f"{short_url}, {name}, {price}, {location}, {quadrature}, {advertiser_name}, {advertiser_number}, {date}, \n"
+        ad_info = f"{short_url}, {name}, {price}, {location}, {quadrature}, {room_number}, {advertiser_name}, {advertiser_number}, {date}, \n"
         return ad_info
 
         # return None
@@ -155,19 +164,43 @@ class OglasiApi():
             print(f"Ad URL is - {self.driver.current_url}")
             return ""
 
-    # def get_room_numbers(self, asin):
-    #     try:
-    #         element = self.driver.find_element_by_css_selector("td[style='vertical-align: top;padding-left:16px']")
-    #         print(element.find_element_by_tag_name('a').get_attribute('href').text.strip().replace(',', ' ')
-    #     except NoSuchElementException as e:
-    #         print(f"Couldn\'t get room numbers of ad with code: {asin}")
-    #         print(f"Ad URL is - {self.driver.current_url}")
-    #         print(e)
-
-    def get_quadrature(self, asin):
+    def get_table(self):
         try:
-            return self.driver.find_element_by_css_selector("td[style='vertical-align: top;padding-left:16px']").text.strip().replace(',', '.')
-        except NoSuchElementException:
+            return self.driver.find_element_by_xpath('/html/body/div[2]/div/div/section/article/div[1]/table').text.strip()
+        except NoSuchElementException as e:
+            print('Cant find table...')
+            return ""
+            
+    def get_room_number(self, asin, table):
+        try:
+            # Sobnost:	Dvosoban
+            room_numbers_re = re.compile('Sobnost: ([a-zA-Z]+)\n')
+            m =  room_numbers_re.search(table)
+            if m:
+                return m.group(1)
+            else:
+                print(f"Couldn\'t get room numbers of ad with code: {asin}")
+                print(f"Ad URL is - {self.driver.current_url}")
+                return ''
+
+        except Exception as e:
+            print(f"Couldn\'t get room numbers of ad with code: {asin}")
+            print(f"Ad URL is - {self.driver.current_url}")
+            print(e)
+            return ''
+
+    def get_quadrature(self, asin, table):
+        try:
+            quadrature_re = re.compile('Kvadratura: (\d+)m2')
+            m = quadrature_re.search(table)
+            if m:
+                return m.group(1)
+            else:
+                print(f"Couldn\'t get quadrature of ad with code: {asin}")
+                print(f"Ad URL is - {self.driver.current_url}")
+                return ''
+
+        except Exception as e:
             print(f"Couldn\'t get quadrature of ad with code: {asin}")
             print(f"Ad URL is - {self.driver.current_url}")
             return ""
@@ -182,7 +215,7 @@ class OglasiApi():
 
     def get_advertiser_number(self, asin):
         try:
-            return self.driver.find_element_by_css_selector("a[href^='tel:']").text.strip()
+            return self.driver.find_element_by_css_selector("a[href^='tel:']").text.strip().replace(',', '|')
         except NoSuchElementException:
             print(f"Couldn\'t get advertiser number of ad with code: {asin}")
             print(f"Ad URL is - {self.driver.current_url}")
@@ -211,6 +244,9 @@ class OglasiApi():
             m = asin_regex.search(link)
             if m:
                 return m.group()
+            elif m == None:
+                print('Could\'n get product unique code...')
+                return None
 
     def shorten_url(self, asin):
         return f"{self.base_url}/oglasi/nekretnine/{asin}/"

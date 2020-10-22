@@ -22,7 +22,7 @@ def convert_to_eur_date(year, month, day):
     return f"{day}-{month}-{year}"
 
 # constants
-HEADERS = 'url, ad_name, price, location, quadrature, advertiser_name, advertiser_number, date\n'
+HEADERS = 'url, ad_name, price, location, quadrature, room_number, advertiser_name, advertiser_number, date\n'
 YEAR = date.today().year
 MONTH = date.today().month
 DAY = date.today().day
